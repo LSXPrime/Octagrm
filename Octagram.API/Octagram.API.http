@@ -1,0 +1,6 @@
+@Octagram.API_HostAddress = http://localhost:5282
+
+GET {{Octagram.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
