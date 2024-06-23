@@ -31,22 +31,21 @@ public class PostsController(IPostService postService) : ControllerBase
     }
 
     /// <summary>
-    /// Gets posts from followed users for the specified user ID.
+    /// Gets posts from followed users for the current user with pagination.
     /// </summary>
-    /// <param name="userId">The ID of the user to retrieve the feed for.</param>
     /// <param name="page">The page number to retrieve (default: 1).</param>
     /// <param name="pageSize">The number of posts per page (default: 10).</param>
     /// <returns>
     /// A paged result containing the requested feed posts.
     /// </returns>
-    [HttpGet("feed/{userId}")]
+    [HttpGet("feed")]
     [AuthorizeMiddleware("User")]
     public async Task<ActionResult<PagedResult<PostDto>>> GetFeedPosts(
-        int userId,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10
     )
     {
+        var userId = GetCurrentUserId();
         var posts = await postService.GetPostsFromFollowedUsersAsync(userId, page, pageSize);
         return Ok(posts);
     }
@@ -58,7 +57,7 @@ public class PostsController(IPostService postService) : ControllerBase
     /// <returns>
     /// The requested post, or a NotFound result if the post is not found.
     /// </returns>
-    [HttpGet("{postId}")]
+    [HttpGet("{postId:int}")]
     public async Task<ActionResult<PostDto>> GetPostById(int postId)
     {
         var post = await postService.GetPostByIdAsync(postId);
@@ -72,7 +71,7 @@ public class PostsController(IPostService postService) : ControllerBase
     /// <returns>
     /// A collection of posts created by the specified user.
     /// </returns>
-    [HttpGet("user/{userId}")]
+    [HttpGet("user/{userId:int}")]
     public async Task<ActionResult<IEnumerable<PostDto>>> GetPostsByUserId(int userId)
     {
         var posts = await postService.GetPostsByUserIdAsync(userId);
@@ -91,12 +90,7 @@ public class PostsController(IPostService postService) : ControllerBase
     public async Task<ActionResult<PostDto>>
         CreatePost([FromForm] CreatePostRequest request)
     {
-        if (!ModelState.IsValid)
-        {
-            return BadRequest(ModelState);
-        }
-
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = GetCurrentUserId();
         var post = await postService.CreatePostAsync(request, userId);
         return CreatedAtAction(nameof(GetPostById), new { postId = post.Id }, post);
     }
@@ -109,16 +103,11 @@ public class PostsController(IPostService postService) : ControllerBase
     /// <returns>
     /// The updated post.
     /// </returns>
-    [HttpPut("{postId}")]
+    [HttpPut("{postId:int}")]
     [AuthorizeMiddleware("User")]
     public async Task<ActionResult<PostDto>> UpdatePost(int postId, [FromBody] UpdatePostRequest request)
-    {
-        if (!ModelState.IsValid)
-        {
-            return BadRequest(ModelState);
-        }
-
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    {  
+        var userId = GetCurrentUserId();
         var post = await postService.UpdatePostAsync(postId, request, userId);
         return Ok(post);
     }
@@ -130,11 +119,11 @@ public class PostsController(IPostService postService) : ControllerBase
     /// <returns>
     /// A NoContent result if the post was successfully deleted.
     /// </returns>
-    [HttpDelete("{postId}")]
+    [HttpDelete("{postId:int}")]
     [AuthorizeMiddleware("User")]
     public async Task<IActionResult> DeletePost(int postId)
     {
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = GetCurrentUserId();
         await postService.DeletePostAsync(postId, userId);
         return NoContent();
     }
@@ -146,11 +135,11 @@ public class PostsController(IPostService postService) : ControllerBase
     /// <returns>
     /// An OK result with a message indicating success.
     /// </returns>
-    [HttpPost("{postId}/like")]
+    [HttpPost("{postId:int}/like")]
     [AuthorizeMiddleware("User")]
     public async Task<IActionResult> LikePost(int postId)
     {
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = GetCurrentUserId();
         await postService.LikePostAsync(postId, userId);
         return Ok("Post liked successfully.");
     }
@@ -162,11 +151,11 @@ public class PostsController(IPostService postService) : ControllerBase
     /// <returns>
     /// An OK result with a message indicating success.
     /// </returns>
-    [HttpDelete("{postId}/like")]
+    [HttpDelete("{postId:int}/like")]
     [AuthorizeMiddleware("User")]
     public async Task<IActionResult> UnlikePost(int postId)
     {
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = GetCurrentUserId();
         await postService.UnlikePostAsync(postId, userId);
         return Ok("Post unliked successfully.");
     }
@@ -179,16 +168,11 @@ public class PostsController(IPostService postService) : ControllerBase
     /// <returns>
     /// The newly created comment.
     /// </returns>
-    [HttpPost("{postId}/comments")]
+    [HttpPost("{postId:int}/comments")]
     [AuthorizeMiddleware("User")]
     public async Task<ActionResult<CommentDto>> CreateComment(int postId, [FromBody] CreateCommentRequest request)
     {
-        if (!ModelState.IsValid)
-        {
-            return BadRequest(ModelState);
-        }
-
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = GetCurrentUserId();
         var comment = await postService.CreateCommentAsync(postId, request, userId);
         return CreatedAtAction(nameof(GetPostById), new { postId }, comment);
     }
@@ -201,12 +185,33 @@ public class PostsController(IPostService postService) : ControllerBase
     /// <returns>
     /// A NoContent result if the comment was successfully deleted.
     /// </returns>
-    [HttpDelete("{postId}/comments/{commentId}")]
+    /// <remarks>
+    /// <see cref="postId"/> isn't required to be correct, it is only used to clarify the route.
+    /// </remarks>
+    [HttpDelete("{postId:int}/comments/{commentId:int}")]
     [AuthorizeMiddleware("User")]
     public async Task<IActionResult> DeleteComment(int postId, int commentId)
     {
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = GetCurrentUserId();
         await postService.DeleteCommentAsync(commentId, userId);
         return NoContent();
+    }
+    
+    /// <summary>
+    /// Gets the current user's ID.
+    /// </summary>
+    /// <returns>
+    /// Returns the current user's ID.
+    /// </returns>
+    /// <exception cref="UnauthorizedAccessException">Thrown if the user ID is not found in the claims.</exception>
+    [NonAction]
+    private int GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+        {
+            throw new UnauthorizedAccessException("User ID not found in claims."); 
+        }
+        return userId;
     }
 }

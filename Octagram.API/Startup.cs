@@ -1,6 +1,7 @@
 ﻿using System.Text.Json;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Octagram.API.Filters;
 using Octagram.API.Hubs;
 using Octagram.API.Utilities;
 using Octagram.Infrastructure.Data.Context;
@@ -17,6 +18,7 @@ public class Startup(IConfiguration configuration)
         services.AddControllers();
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(Configuration.GetConnectionString("DefaultConnection")));
+        services.AddMvc(options => options.Filters.Add(typeof(ModelStateValidationFilter)));
         
         // 2. Configure AutoMapper
         services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());

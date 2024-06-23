@@ -17,6 +17,17 @@ public class StoryService(
     : IStoryService
 {
     /// <summary>
+    /// Retrieves a story by its ID.
+    /// </summary>
+    /// <param name="id">The ID of the story to be retrieved.</param>
+    /// <returns>The story DTO representing the requested story.</returns>
+    public async Task<StoryDto> GetStoryByIdAsync(int id)
+    {
+        var story = await storyRepository.GetByIdAsync(id);
+        return mapper.Map<StoryDto>(story);
+    }
+    
+    /// <summary>
     /// Retrieves a list of stories created by a specific user.
     /// </summary>
     /// <param name="userId">The ID of the user whose stories are to be retrieved.</param>

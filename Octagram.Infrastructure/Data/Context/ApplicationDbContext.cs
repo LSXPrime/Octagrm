@@ -15,6 +15,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<PostHashtag> PostHashtags { get; set; }
     public DbSet<DirectMessage> DirectMessages { get; set; }
     public DbSet<Notification> Notifications { get; set; }
+    public DbSet<Role> Roles { get; set; }
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
     
     
     /// <summary>

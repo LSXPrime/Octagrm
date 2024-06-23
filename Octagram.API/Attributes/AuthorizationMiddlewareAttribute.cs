@@ -21,7 +21,8 @@ public class AuthorizeMiddlewareAttribute(bool allowAnonymous, params string[] r
         var httpContext = context.HttpContext;
         var authService = httpContext.RequestServices.GetRequiredService<IAuthService>();
         var userRepository = httpContext.RequestServices.GetRequiredService<IUserRepository>();
-        var middleware = new AuthorizationMiddleware(async _ => await next(), authService, userRepository, roles, allowAnonymous);
+        var roleRepository = httpContext.RequestServices.GetRequiredService<IRoleRepository>();
+        var middleware = new AuthorizationMiddleware(async _ => await next(), authService, userRepository, roleRepository, roles, allowAnonymous);
         await middleware.InvokeAsync(httpContext);
     }
 }

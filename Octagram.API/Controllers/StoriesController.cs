@@ -3,6 +3,8 @@ using Octagram.Application.DTOs;
 using Octagram.Application.Interfaces;
 using Octagram.API.Attributes;
 using System.Security.Claims;
+using Octagram.Application.Exceptions;
+using UnauthorizedAccessException = System.UnauthorizedAccessException;
 
 namespace Octagram.API.Controllers;
 
@@ -17,7 +19,7 @@ public class StoriesController(IStoryService storyService) : ControllerBase
     /// <returns>
     /// An Ok response with a list of <see cref="StoryDto"/> objects.
     /// </returns>
-    [HttpGet("user/{userId}")]
+    [HttpGet("user/{userId:int}")]
     public async Task<ActionResult<IEnumerable<StoryDto>>> GetStoriesByUserId(int userId)
     {
         var stories = await storyService.GetStoriesByUserIdAsync(userId);
@@ -51,12 +53,7 @@ public class StoriesController(IStoryService storyService) : ControllerBase
     [AuthorizeMiddleware("User")]
     public async Task<ActionResult<StoryDto>> CreateStory([FromForm] CreateStoryRequest request)
     {
-        if (!ModelState.IsValid)
-        {
-            return BadRequest(ModelState);
-        }
-
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = GetCurrentUserId();
         var story = await storyService.CreateStoryAsync(request, userId);
         return CreatedAtAction(nameof(GetStoriesByUserId), new { userId = story.UserId }, story);
     }
@@ -68,12 +65,41 @@ public class StoriesController(IStoryService storyService) : ControllerBase
     /// <returns>
     /// A NoContent response if the story is deleted successfully.
     /// </returns>
-    [HttpDelete("{storyId}")]
+    [HttpDelete("{storyId:int}")]
     [AuthorizeMiddleware("User")]
     public async Task<IActionResult> DeleteStory(int storyId)
     {
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userId = GetCurrentUserId();
+        var existingStory = await storyService.GetStoryByIdAsync(storyId);
+        if (existingStory == null)
+        {
+            throw new NotFoundException("Story not found.");
+        }
+
+        if (existingStory.UserId != userId)
+        {
+            throw new UnauthorizedAccessException("You are not authorized to delete this story.");
+        }
+        
         await storyService.DeleteStoryAsync(storyId, userId);
         return NoContent();
+    }
+    
+    /// <summary>
+    /// Gets the current user's ID.
+    /// </summary>
+    /// <returns>
+    /// Returns the current user's ID.
+    /// </returns>
+    /// <exception cref="UnauthorizedAccessException">Thrown if the user ID is not found in the claims.</exception>
+    [NonAction]
+    private int GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+        {
+            throw new UnauthorizedAccessException("User ID not found in claims."); 
+        }
+        return userId;
     }
 }

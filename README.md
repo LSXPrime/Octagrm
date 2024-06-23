@@ -36,21 +36,23 @@ The API endpoints are grouped by functionality:
 
 - `POST /api/authentication/register`: Registers a new user.
 - `POST /api/authentication/login`: Authenticates a user and returns a JWT token.
+- `POST /api/authentication/refresh`: Refreshes a user's expired JWT token.
 
 ### 2. Users
 
 - `GET /api/users/{userId}`: Retrieves a user profile by ID.
 - `GET /api/users/username/{username}`: Retrieves a user profile by username.
-- `PUT /api/users/{userId}`: Updates a user's profile information.
+- `PUT /api/users/`: Updates current user's profile information.
 - `GET /api/users/search/{query}`: Searches for users based on a query string.
-- `POST /api/users/{userId}/follow/{followingId}`: Follows another user.
-- `DELETE /api/users/{userId}/follow/{followingId}`: Unfollows another user.
+- `POST /api/users/follow/{followingId}`: Follows another user.
+- `DELETE /api/users/follow/{followingId}`: Unfollows another user.
 - `GET /api/users/{userId}/followers`: Retrieves a list of a user's followers.
 - `GET /api/users/{userId}/following`: Retrieves a list of users a user is following.
 
 ### 3. Posts
 
 - `GET /api/posts`: Retrieves all posts, with optional pagination and hashtag filtering.
+- `GET /api/posts/feed`: Gets posts from followed users for the current user, with optional pagination.
 - `GET /api/posts/{postId}`: Retrieves a specific post by ID.
 - `GET /api/posts/user/{userId}`: Retrieves posts by a specific user.
 - `POST /api/posts`: Creates a new post.
@@ -76,7 +78,7 @@ The API endpoints are grouped by functionality:
 
 ### 6. Direct Messages
 
-- `GET /api/directmessage/{userId1}/{userId2}`: Retrieves conversation between two users, with pagination.
+- `GET /api/directmessage/{targetUserId}`: Retrieves conversation between current user and target user, with pagination.
 - `POST /api/directmessage`: Sends a direct message (for testing, see `DirectMessagesHub` for real-time functionality).
 - `PATCH /api/directmessage/{messageId}/read`: Marks a message as read.
 

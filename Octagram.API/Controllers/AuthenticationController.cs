@@ -1,12 +1,13 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Octagram.Application.DTOs;
 using Octagram.Application.Interfaces;
+using Octagram.Domain.Repositories;
 
 namespace Octagram.API.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-public class AuthenticationController(IAuthService authService) : ControllerBase
+public class AuthenticationController(IAuthService authService, IUserRepository userRepository, IRefreshTokenRepository refreshTokenRepository) : ControllerBase
 {
     /// <summary>
     /// Registers a new user.
@@ -20,11 +21,6 @@ public class AuthenticationController(IAuthService authService) : ControllerBase
     [HttpPost("register")] 
     public async Task<IActionResult> Register([FromBody] RegisterDto newUser)
     {
-        if (!ModelState.IsValid) 
-        {
-            return BadRequest(ModelState); 
-        }
-
         var result = await authService.RegisterAsync(newUser);
 
         if (result)
@@ -46,11 +42,6 @@ public class AuthenticationController(IAuthService authService) : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto login)
     {
-        if (!ModelState.IsValid)
-        {
-            return BadRequest(ModelState); 
-        }
-
         var token = await authService.LoginUserAsync(login);
 
         if (token != null)
@@ -59,5 +50,37 @@ public class AuthenticationController(IAuthService authService) : ControllerBase
         }
 
         return Unauthorized("Invalid username or password."); 
+    }
+    
+    /// <summary>
+    /// Refreshes the JWT token using the provided refresh token.
+    /// </summary>
+    /// <param name="refreshTokenDto">The refresh token to use for token refresh.</param>
+    /// <returns>
+    /// Returns an OK response with the new JWT token if the refresh is successful.
+    /// Returns an Unauthorized response with a message "Invalid refresh token." if the refresh token is invalid.
+    /// Returns an Unauthorized response with a message "User associated with refresh token not found." if the user associated with the refresh token is not found.
+    /// </returns>
+    [HttpPost("refresh")]
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenDto refreshTokenDto)
+    {
+        var storedRefreshToken = await refreshTokenRepository.GetByTokenAsync(refreshTokenDto.Token);
+        if (storedRefreshToken == null || storedRefreshToken.Expires < DateTime.UtcNow)
+        {
+            return Unauthorized("Invalid refresh token.");
+        }
+        await refreshTokenRepository.DeleteAsync(storedRefreshToken);
+        Console.WriteLine($"Token: {storedRefreshToken.Token} Deleted successfully.");
+
+        var userId = storedRefreshToken.UserId; 
+        var user = await userRepository.GetByIdAsync(userId);
+        if (user == null) 
+        {
+            return Unauthorized("User associated with refresh token not found.");
+        }
+
+        var newTokens = authService.GenerateJwtToken(userId, user.Username, storedRefreshToken.Role);
+        
+        return Ok(newTokens);
     }
 }

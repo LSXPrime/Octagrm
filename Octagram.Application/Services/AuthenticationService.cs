@@ -11,7 +11,7 @@ using Octagram.Application.Interfaces;
 
 namespace Octagram.Application.Services;
 
-public class AuthService(IUserRepository userRepository, IConfiguration configuration)
+public class AuthService(IUserRepository userRepository, IRefreshTokenRepository refreshTokenRepository, IConfiguration configuration)
     : IAuthService
 {
     /// <summary>
@@ -26,7 +26,7 @@ public class AuthService(IUserRepository userRepository, IConfiguration configur
         {
             return null;
         }
-        
+
         var token = GenerateJwtToken(user.Id, user.Username, "User");
 
         return token;
@@ -61,7 +61,7 @@ public class AuthService(IUserRepository userRepository, IConfiguration configur
     }
 
     /// <summary>
-    /// Generates a JWT token for a given user.
+    /// Generates a JWT and refresh token for a given user.
     /// </summary>
     /// <param name="userId">The ID of the user.</param>
     /// <param name="userName">The username of the user.</param>
@@ -71,8 +71,10 @@ public class AuthService(IUserRepository userRepository, IConfiguration configur
     {
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = Encoding.ASCII.GetBytes(configuration.GetSection("Jwt:Secret").Value!);
-        var expiration = int.Parse(configuration.GetSection("Jwt:TokenExpirationInMinutes").Value!);
+        var accessTokenExpiration = int.Parse(configuration.GetSection("Jwt:AccessTokenExpirationInDays").Value!);
+        var refreshTokenExpiration = int.Parse(configuration.GetSection("Jwt:RefreshTokenExpirationInDays").Value!);
 
+        // Access Token
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(new Claim[]
@@ -81,13 +83,36 @@ public class AuthService(IUserRepository userRepository, IConfiguration configur
                 new(ClaimTypes.Name, userName),
                 new(ClaimTypes.Role, role)
             }),
-            Expires = DateTime.UtcNow.AddMinutes(expiration),
-            SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+            Expires = DateTime.UtcNow.AddDays(accessTokenExpiration),
+            SigningCredentials =
+                new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
         };
+        var accessToken = tokenHandler.CreateToken(tokenDescriptor);
+        var refreshToken = GenerateRefreshToken();
+        var refreshExpirationDate = DateTime.UtcNow.AddDays(refreshTokenExpiration);
+
+        // Store the refresh token in the database
+        refreshTokenRepository.AddAsync(new RefreshToken { UserId = userId, Token = refreshToken, Expires = refreshExpirationDate, Role = role });
         
-        var token = tokenHandler.CreateToken(tokenDescriptor);
-        
-        return new JwtTokenDto { Token = tokenHandler.WriteToken(token), Expiration = tokenDescriptor.Expires.Value };
+        return new JwtTokenDto
+        {
+            AccessToken = tokenHandler.WriteToken(accessToken),
+            AccessTokenExpiration = tokenDescriptor.Expires.Value,
+            RefreshToken = refreshToken,
+            RefreshTokenExpiration = refreshExpirationDate
+        };
+    }
+    
+    /// <summary>
+    /// Generates a random refresh token.
+    /// </summary>
+    /// <returns>The generated refresh token.</returns>
+    private string GenerateRefreshToken()
+    {
+        var randomNumber = new byte[32];
+        using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
+        rng.GetBytes(randomNumber);
+        return Convert.ToBase64String(randomNumber);
     }
 
     /// <summary>

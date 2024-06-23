@@ -20,13 +20,16 @@ public class UsersController(IUserService userService) : ControllerBase
     /// <remarks>
     /// This endpoint requires authentication and authorization as a "User."
     /// </remarks>
-    [HttpGet("{userId}")]
-    [AuthorizeMiddleware(true,"User")]
+    [HttpGet("{userId:int}")]
+    [AuthorizeMiddleware(true, "User")]
     public async Task<ActionResult<UserDto>> GetUserById(int userId)
     {
         var user = await userService.GetUserByIdAsync(userId);
-        if (user != null && int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier)!, out var currentUserId))
-            user.IsFollowedByUser = await userService.IsFollowingAsync(currentUserId, user.Id);
+        if (user == null)
+            return NotFound();
+
+        var currentUserId = GetCurrentUserId();
+        user.IsFollowedByUser = await userService.IsFollowingAsync(currentUserId, user.Id);
 
         return Ok(user);
     }
@@ -42,12 +45,15 @@ public class UsersController(IUserService userService) : ControllerBase
     /// This endpoint requires authentication and authorization as a "User."
     /// </remarks>
     [HttpGet("username/{username}")]
-    [AuthorizeMiddleware(true,"User")]
+    [AuthorizeMiddleware(true, "User")]
     public async Task<ActionResult<UserDto>> GetUserByUsername(string username)
     {
         var user = await userService.GetUserByUsernameAsync(username);
-        if (user != null && int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier)!, out var currentUserId))
-            user.IsFollowedByUser = await userService.IsFollowingAsync(currentUserId, user.Id);
+        if (user == null)
+            return NotFound();
+
+        var currentUserId = GetCurrentUserId();
+        user.IsFollowedByUser = await userService.IsFollowingAsync(currentUserId, user.Id);
 
         return Ok(user);
     }
@@ -55,7 +61,6 @@ public class UsersController(IUserService userService) : ControllerBase
     /// <summary>
     /// Update a user's profile information.
     /// </summary>
-    /// <param name="userId">The ID of the user to update.</param>
     /// <param name="request">The updated user data.</param>
     /// <returns>
     /// Returns an OK response with the updated user data if the update is successful.
@@ -64,15 +69,11 @@ public class UsersController(IUserService userService) : ControllerBase
     /// <remarks>
     /// This endpoint requires authentication and authorization as a "User."
     /// </remarks>
-    [HttpPut("{userId}")]
+    [HttpPut]
     [AuthorizeMiddleware("User")]
-    public async Task<IActionResult> UpdateUser(int userId, [FromBody] UpdateUserRequest request)
+    public async Task<IActionResult> UpdateUser([FromBody] UpdateUserRequest request)
     {
-        if (!ModelState.IsValid)
-        {
-            return BadRequest(ModelState);
-        }
-
+        var userId = GetCurrentUserId();
         var user = await userService.UpdateUserAsync(userId, request);
         return Ok(user);
     }
@@ -94,7 +95,6 @@ public class UsersController(IUserService userService) : ControllerBase
     /// <summary>
     /// Follow a user.
     /// </summary>
-    /// <param name="userId">The ID of the user making the follow request.</param>
     /// <param name="followingId">The ID of the user to follow.</param>
     /// <returns>
     /// Returns an OK response with a message "User followed successfully." if the follow operation is successful.
@@ -102,10 +102,14 @@ public class UsersController(IUserService userService) : ControllerBase
     /// <remarks>
     /// This endpoint requires authentication and authorization as a "User."
     /// </remarks>
-    [HttpPost("{userId}/follow/{followingId}")]
+    [HttpPost("follow/{followingId:int}")]
     [AuthorizeMiddleware("User")]
-    public async Task<IActionResult> FollowUser(int userId, int followingId)
+    public async Task<IActionResult> FollowUser(int followingId)
     {
+        var userId = GetCurrentUserId();
+        if (userId == followingId)
+            return BadRequest("You cannot follow yourself.");
+        
         await userService.FollowUserAsync(userId, followingId);
         return Ok("User followed successfully.");
     }
@@ -113,7 +117,6 @@ public class UsersController(IUserService userService) : ControllerBase
     /// <summary>
     /// Unfollow a user.
     /// </summary>
-    /// <param name="userId">The ID of the user making the unfollow request.</param>
     /// <param name="followingId">The ID of the user to unfollow.</param>
     /// <returns>
     /// Returns an OK response with a message "User unfollowed successfully." if the unfollow operation is successful.
@@ -121,10 +124,14 @@ public class UsersController(IUserService userService) : ControllerBase
     /// <remarks>
     /// This endpoint requires authentication and authorization as a "User."
     /// </remarks>
-    [HttpDelete("{userId}/follow/{followingId}")]
+    [HttpDelete("follow/{followingId}")]
     [AuthorizeMiddleware("User")]
-    public async Task<IActionResult> UnfollowUser(int userId, int followingId)
+    public async Task<IActionResult> UnfollowUser(int followingId)
     {
+        var userId = GetCurrentUserId();
+        if (userId == followingId)
+            return BadRequest("You cannot unfollow yourself.");
+        
         await userService.UnfollowUserAsync(userId, followingId);
         return Ok("User unfollowed successfully.");
     }
@@ -136,7 +143,7 @@ public class UsersController(IUserService userService) : ControllerBase
     /// <returns>
     /// Returns an OK response with a list of the user's followers.
     /// </returns>
-    [HttpGet("{userId}/followers")]
+    [HttpGet("{userId:int}/followers")]
     public async Task<ActionResult<IEnumerable<UserDto>>> GetFollowers(int userId)
     {
         var followers = await userService.GetFollowersAsync(userId);
@@ -150,10 +157,29 @@ public class UsersController(IUserService userService) : ControllerBase
     /// <returns>
     /// Returns an OK response with a list of the user's followed users.
     /// </returns>
-    [HttpGet("{userId}/following")]
+    [HttpGet("{userId:int}/following")]
     public async Task<ActionResult<IEnumerable<UserDto>>> GetFollowing(int userId)
     {
         var following = await userService.GetFollowingAsync(userId);
         return Ok(following);
+    }
+
+    /// <summary>
+    /// Gets the current user's ID.
+    /// </summary>
+    /// <returns>
+    /// Returns the current user's ID.
+    /// </returns>
+    /// <exception cref="UnauthorizedAccessException">Thrown if the user ID is not found in the claims.</exception>
+    [NonAction]
+    private int GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+        {
+            throw new UnauthorizedAccessException("User ID not found in claims.");
+        }
+
+        return userId;
     }
 }

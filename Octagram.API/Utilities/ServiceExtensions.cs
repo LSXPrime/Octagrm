@@ -26,6 +26,8 @@ public static class ServiceExtensions
         services.AddScoped<IPostHashtagRepository, PostHashtagRepository>();
         services.AddScoped<IDirectMessageRepository, DirectMessageRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
+        services.AddScoped<IRoleRepository, RoleRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         
         return services;
     }
